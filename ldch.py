@@ -1,16 +1,15 @@
 import datetime
 import json
+from random import randint, choice, shuffle
+from urllib.parse import quote
+
 import pymongo
 import requests
 import scrapy
 import stem
 import stem.control
-
-from twisted.internet import reactor
 from scrapy.crawler import CrawlerProcess
-from random import randint, choice, shuffle
-from urllib.parse import quote
-
+from twisted.internet import reactor
 
 SETTINGS = {
     # Scrapy
@@ -30,7 +29,7 @@ SETTINGS = {
 
     # Projeto (acessíveis pelo Spider)
     'MONGO_URI': 'mongodb://localhost/ldch',
-    'TOR_HTTP_PROXY': 'http://localhost:8118',
+    'HTTP_PROXY': 'http://localhost:8118',
     'TOR_CHANGE_CIRCUIT_INTERVAL_RANGE': (100, 400),
     'USER_AGENTS': [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
@@ -151,22 +150,20 @@ def change_tor_circuit():
         tor.signal(stem.Signal.NEWNYM)
 
 
-def web_archive(url, user_agent):
+def web_archive(url, user_agent, proxy):
     "Aciona arquivamento da web.archive.org e retorna a URL."
 
     url1 = 'http://web.archive.org/save/' + url
     url2 = 'http://web.archive.org/__wb/sparkline?output=json&collection=web&url='
     url2 += quote(url)
 
-    headers = {
-        'User-Agent': user_agent
-    }
-    req1 = requests.get(url1, headers=headers)
-    req2 = requests.get(url2, cookies=req1.cookies, headers=headers)
-
+    with requests.Session() as session:
+        session.proxies.update({'http': proxy})
+        session.headers.update({'User-Agent': user_agent})
+        session.get(url1)
+        req2 = session.get(url2)
     payload = json.loads(req2.content.decode())
-    ts = payload['last_ts']
-    return 'http://web.archive.org/web/%s/%s' % (ts, url)
+    return 'http://web.archive.org/web/%s/%s' % (payload['last_ts'], url)
 
 
 class LdchMiddleware:
@@ -178,7 +175,7 @@ class LdchMiddleware:
         shuffle(requests)
 
         for request in requests:
-            request.meta['proxy'] = spider.settings.get('TOR_HTTP_PROXY')
+            request.meta['proxy'] = spider.settings.get('HTTP_PROXY')
             request.headers['User-Agent'] = choice(spider.settings.get('USER_AGENTS'))
             yield request
 
@@ -190,8 +187,10 @@ class LdchMiddleware:
         user_agent = choice(spider.settings.get('USER_AGENTS'))
         mongo_uri = spider.settings.get('MONGO_URI')
         mongo_collection = spider.name[:spider.name.index('Spider')]
+        proxy = spider.settings.get('HTTP_PROXY')
 
-        web_archive_url = web_archive(url, user_agent)
+        web_archive_url = web_archive(url, user_agent, proxy)
+
         for item in result:
             item['web_archive_url'] = web_archive_url
             self._save_results(mongo_uri, mongo_collection, item)
