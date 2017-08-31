@@ -167,10 +167,11 @@ def web_archive(url, user_agent, proxy):
 
 
 class LdchMiddleware:
-    "Posprocessa o resultado de uma raspagem."
+    "Prepara requisições e posprocessa resultados de raspagens."
 
     def process_start_requests(self, start_requests, spider):
-        """Faz a requisição utilizar um proxy"""
+        "Prepara uma requisição."
+
         requests = list(start_requests)
         shuffle(requests)
 
@@ -186,13 +187,13 @@ class LdchMiddleware:
         url = response.url
         user_agent = choice(spider.settings.get('USER_AGENTS'))
         mongo_uri = spider.settings.get('MONGO_URI')
-        mongo_collection = spider.name[:spider.name.index('Spider')]
+        mongo_collection = spider.name
         proxy = spider.settings.get('HTTP_PROXY')
 
         web_archive_url = web_archive(url, user_agent, proxy)
 
         for item in result:
-            item['web_archive_url'] = web_archive_url
+            item['__web_archive_url'] = web_archive_url
             self._save_results(mongo_uri, mongo_collection, item)
             yield item
 
@@ -203,15 +204,35 @@ class LdchMiddleware:
 
 
 class LdchSpider(scrapy.Spider):
-    "Base para os spiders do LDCH"
+    """Base para os spiders do LDCH.
+
+    Subclasses de LdchSpider podem implementar o método `start_requests()` que
+    retorna uma iterador de `scrapy.Requests()`. Cada `scrapy.Request` tem uma
+    URL e um callback. O callback poderá retornar um iterador de itens
+    (`dict`s) que representa os dados raspados. `finish_item()` deverá ser
+    aplicado em cada item antes de ser "`yield`ado".
+
+    Variações do esquema acima são possíveis dentro das possibilidades do
+    Scrapy.
+
+    Todos os nomes de `Spider`s devem terminar com a string "Spider", por
+    exemplo "TceRemunSpider".
+    """
 
     value_names = None
 
     @property
     def name(self):
-        return self.__class__.__name__
+        n = self.__class__.__name__
+        assert n.endswith("Spider"), "Spider name does not ends with 'Spider'"
+        return n[:n.index('Spider')]
 
     def tuple_to_dict(self, args):
+        """Utilitário para transformar um iterável num dicionário.
+
+        A propriedade `value_names` é uma lista ordenada de títulos que será
+        para cada elemento do iterador.
+        """
         if self.value_names is not None and len(args) != len(self.value_names):
             raise ValueError("Length of arguments is different from value_names")
         return dict(zip(self.value_names, args))
