@@ -25,7 +25,7 @@ SETTINGS = {
     'RANDOMIZE_DOWNLOAD_DELAY': True,
 
     'SPIDER_MIDDLEWARES': {
-        'lhcd.LdchMiddleware': 500
+        'ldch.LdchMiddleware': 500
     },
 
     # Projeto (acessíveis pelo Spider)

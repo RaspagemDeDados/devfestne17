@@ -13,6 +13,6 @@ setup(
         'pymongo'
     ],
     entry_points = {
-        'console_scripts': ['lhcd = lhcd:main']
+        'console_scripts': ['ldch = ldch:main']
     }
 )
