@@ -1,7 +1,8 @@
+import collections
 import datetime
 import json
 from random import randint, choice, shuffle
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import pymongo
 import requests
@@ -190,9 +191,15 @@ class LdchMiddleware:
         mongo_collection = spider.name
         proxy = spider.settings.get('HTTP_PROXY')
 
+        result = list(result)
+        if not all(isinstance(r, collections.Mapping) for r in result):
+            return
+
         web_archive_url = web_archive(url, user_agent, proxy)
 
         for item in result:
+            if not isinstance(item, collections.Mapping):
+                continue
             item['__web_archive_url'] = web_archive_url
             self._save_results(mongo_uri, mongo_collection, item)
             yield item
@@ -257,7 +264,7 @@ class TceRemuneracaoSpider(LdchSpider):
 
     def start_requests(self):
         for url in self.generate_urls_by_year(2013, 2017):
-            yield scrapy.Request(url, self.process_url)
+            yield scrapy.Request(url)
 
     def generate_urls_by_year(self, start, end):
         urls = []
@@ -272,11 +279,6 @@ class TceRemuneracaoSpider(LdchSpider):
                 )
         #urls = ['https://www.tce.ba.gov.br/component/cdsremuneracao/?ano=%d&mes=%d&pesquisar=Pesquisar&tmpl=component&view=consolidado&ano=2015&mes=1']
         return urls
-
-    def process_url(self, resp):
-        for item in self.parse(resp):
-            self.finish_item(item, resp)
-            yield item
 
 
     def parse(self, resp):
@@ -293,9 +295,10 @@ class TceRemuneracaoSpider(LdchSpider):
                     continue
                 employee['Cargo'] = positions[i].strip()
                 employee['Data de apuração'] = extraction_date
+                self.finish_item(employee, resp)
                 yield employee
 
-        if i+1 != len(positions):
+        if (i or 0) + 1 != len(positions):
             raise Exception("Quantidade de cargos diferente da quantidade de tabelas")
 
     def extract_employee(self, values):
@@ -315,6 +318,94 @@ class TceRemuneracaoSpider(LdchSpider):
         if type(empl[0]) != int:
             return None
         return self.tuple_to_dict(empl)
+
+
+class TcmPessoalSpider(LdchSpider):
+
+    start_urls = ["https://www.tcm.ba.gov.br/portal-da-cidadania/pessoal/"]
+
+    value_names = [
+        "Nome", "Matrícula", "Tipo Servidor", "Cargo", "Salário Base",
+        "Salário Vantagens", "Salário Gratificação"
+    ]
+
+    def parse(self, response):
+        cdMunicipios = "//select[@id='municipios']/option[@value != '']/@value"
+        cdMunicipios = response.xpath(cdMunicipios).extract()
+
+        dsMunicipios = "//select[@id='municipios']/option[@value != '']/text()"
+        dsMunicipios = response.xpath(dsMunicipios).extract()
+
+        cont = 0
+        for cdMunicipio, dsMunicipio in zip(cdMunicipios, dsMunicipios):
+            dsMunicipio = dsMunicipio.strip()
+            cont += 1
+            if cont == 3:
+                break
+            url = "http://www.tcm.ba.gov.br/Webservice/public/index.php/entidades?" + urlencode({
+                'cdMunicipio': cdMunicipio
+            })
+            yield scrapy.Request(url, callback=self.encontrar_entidades,
+                                 dont_filter=True, meta={
+                'cdMunicipio': cdMunicipio,
+                'dsMunicipio': dsMunicipio
+            })
+
+    def encontrar_entidades(self, response):
+        entidades = json.loads(response.body_as_unicode())
+
+        for entidade in entidades:
+            url = "http://www.tcm.ba.gov.br/Webservice/public/index.php/tipoRegime?" + urlencode({
+                'cdMunicipio': response.meta['cdMunicipio'],
+                'cdEntidade': entidade['cdEntidade']
+            })
+            meta = response.meta.copy()
+            meta.update({
+                'cdEntidade': entidade['cdEntidade'],
+                'dsEntidade': entidade['dsEntidade']
+            })
+            yield scrapy.Request(url, callback=self.encontrar_regimes,
+                                 dont_filter=True, meta=meta)
+
+    def encontrar_regimes(self, response):
+        now = datetime.datetime.now()
+        regimes = json.loads(response.body_as_unicode())
+        for regime in regimes:
+            for ano in range(200, now.year+1):
+                for mes in range(1, 13):
+                    if ano == now.year and mes > now.month+1:
+                        continue
+                    url = "http://www.tcm.ba.gov.br/portal-da-cidadania/pessoal"
+                    meta = response.copy()
+                    meta.update({
+                        'tp_Regime': regime['tp_Regime'],
+                        'de_Regime': regime['de_Regime']
+                    })
+
+                    yield scrapy.FormRequest(url, callback=self.extrair_tabela,
+                                             dont_filter=True,  meta=meta,
+                                             formdata={
+                        'municipios': response.meta['cdMunicipio'],
+                        'txtEntidade': response.meta['dsEntidade'],
+                        'entidades': response.meta['cdEntidade'],
+                        'ano': str(ano),
+                        'mes': str(mes),
+                        'tipoRegime': regime['tp_Regime'],
+                        'pesquisar': 'Pesquisar'
+                    })
+
+    def extrair_tabela(self, response):
+        for linha in response.css("#tabelaResultado tbody tr"):
+            funcionario = linha.xpath("th/text()").extract()
+            funcionario = self.tuple_to_dict(funcionario)
+            funcionario.update({
+                'Município': response.meta['dsMunicipio'],
+                'Entidade': response.meta['dsEntidade'],
+
+            })
+            self.finish_item(funcionario, response)
+            yield funcionario
+
 
 
 # class TceVencimentoBasico(scrapy.Spider):
@@ -358,7 +449,7 @@ class TceRemuneracaoSpider(LdchSpider):
 #         }
 
 
-class TorSpider(LdchSpider):
+class TorTestSpider(LdchSpider):
 
     def start_requests(self):
         for i in range(40):
@@ -386,7 +477,7 @@ def main():
             reactor.callLater(random_wait_time(), change_tor_circuit_randomly)
 
     proc = CrawlerProcess(SETTINGS)
-    for klass in [TceRemuneracaoSpider]:
+    for klass in [TcmPessoalSpider, TceRemuneracaoSpider]:
         proc.crawl(klass)
 
     reactor.callLater(random_wait_time(), change_tor_circuit_randomly)

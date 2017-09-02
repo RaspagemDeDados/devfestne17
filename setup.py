@@ -10,7 +10,7 @@ setup(
         'paramiko',
         'stem',
         'twisted',
-        'pymongo'
+        'pymongo',
     ],
     entry_points = {
         'console_scripts': ['ldch = ldch:main']
