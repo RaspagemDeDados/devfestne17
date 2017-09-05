@@ -2,13 +2,22 @@
 
 Repositório para produção de código da palestra (ainda não aceita) no DevFest Nordeste 2017.
 
+## Requisitos
+
+* **Docker**
+
 ## Instalação
 
-    $ make serve
+```bash
+$ make serve
+```
 
-Alguns programas são necessários para o lhcd.py funcionar:
-  
-* **Docker**: para montar o ambiente;
+## Execução
+
+```bash
+$ make shell
+$ python lhcd.py
+```  
 
 ## TODO
 
