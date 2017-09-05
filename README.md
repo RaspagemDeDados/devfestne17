@@ -4,14 +4,11 @@ Repositório para produção de código da palestra (ainda não aceita) no DevFe
 
 ## Instalação
 
-    $ python3 setup.py install
+    $ make serve
 
 Alguns programas são necessários para o lhcd.py funcionar:
   
-* **Tor**: com a porta de controle padrão;
-* **Proxy SOCKS5/HTTP**: para tunelar o SOCKS5 do Tor até o Scrapy, que só aceita HTTP:
-    * Por exemplo o Privoxy com a opção `forward-socks5t / 127.0.0.1:9050` e o Tor com a porta de proxy padrão.
-* **MongoDB**:
+* **Docker**: para montar o ambiente;
 
 ## TODO
 
