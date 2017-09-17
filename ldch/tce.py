@@ -1,7 +1,9 @@
-import datetime
+from urllib.parse import urlencode
 
 import scrapy
-from ldch.base import LdchSpider, parse_float
+
+from ldch import settings
+from ldch.base import LdchSpider, parse_float, date_range
 
 
 class TceRemuneracaoSpider(LdchSpider):
@@ -18,58 +20,40 @@ class TceRemuneracaoSpider(LdchSpider):
     )
 
     def start_requests(self):
-        now = datetime.datetime.now()
-        start_year = self.settings['START_YEAR']
-        for year in range(start_year, now.year+1):
-            for month in range(1, 13):
-                if now.year == year and now.month == month:
-                    break
-                yield scrapy.Request(
-                    'https://www.tce.ba.gov.br/component/cdsremuneracao/?ano=%d&mes=%d&pesquisar=Pesquisar&tmpl=component&view=consolidado'
-                    % (year, month))
-                # 'https://www.tce.ba.gov.br/component/cdsremuneracao/?ano=%d&mes=%d&pesquisar=Pesquisar&tmpl=component&view=consolidado&ano=2015&mes=1'
+        for ano, mes in date_range(settings.START_YEAR):
+            url = 'https://www.tce.ba.gov.br/component/cdsremuneracao/?' + urlencode({
+                'ano': ano,
+                'mes': mes,
+                'pesquisar': 'Pesquisar',
+                'tmpl': 'component',
+                'view': 'consolidado'
 
+            })
+            yield scrapy.Request(url, callback=self.parse_tabela)
 
-    def parse(self, resp):
-        positions = resp.xpath("//b[contains(text(), 'CARGO:')]/../text()").extract()[3:]
-        positions = (p.strip() for p in positions)
-        positions = [p for p in positions if p != ""]
+    def parse_tabela(self, response):
+        cargos = response.xpath("//b[contains(text(), 'CARGO:')]/../text()").extract()[3:]
+        cargos = (p.strip() for p in cargos)
+        cargos = [p for p in cargos if p != ""]
 
-        extraction_date = resp.xpath("//b[contains(text(), 'Mês/Ano')]/../text()").extract_first().strip()
+        competencia = response.xpath("//b[contains(text(), 'Mês/Ano')]/../text()").extract_first().strip()
+        mes, ano = competencia.split('/')
 
         i = None
-        for i, table in enumerate(resp.css('.cTable tbody')):
-            for funcionario in table.css('tr'):
-                funcionario = funcionario.xpath('td/text()').extract()
-                if len(funcionario) == 1:
-                    assert funcionario[0].strip().startswith("* A remuneração")
+        for i, table in enumerate(response.css('.cTable tbody')):
+            for remuneracao in table.css('tr'):
+                remuneracao = remuneracao.xpath('td/text()').extract()
+                if len(remuneracao) == 1:
+                    assert remuneracao[0].strip().startswith("* A remuneração")
                     continue
 
-                funcionario = self.tuple_to_dict(funcionario)
-                funcionario['Cargo'] = positions[i].strip()
-                funcionario['Data de apuração'] = extraction_date
-                yield funcionario
+                remuneracao = self.list_to_item(remuneracao)
+                remuneracao['Cargo'] = cargos[i].strip()
+                remuneracao['Competência'] = '%s-%s' % (mes, ano)
+                yield remuneracao
 
-        if (i or 0) + 1 != len(positions):
+        if (i or 0) + 1 != len(cargos):
             raise Exception("Quantidade de cargos diferente da quantidade de tabelas")
-
-    def extract_employee(self, values):
-        empl = []
-        for value in values:
-            value = value.strip()
-            if value in ["", "-"]:
-                empl.append(None)
-                continue
-            try:
-                empl.append(int(value))
-            except:
-                try:
-                    empl.append(parse_float(value))
-                except:
-                    empl.append(value)
-        if type(empl[0]) != int:
-            return None
-        return self.tuple_to_dict(empl)
 
 
 # class TceVencimentoBasico(scrapy.Spider):

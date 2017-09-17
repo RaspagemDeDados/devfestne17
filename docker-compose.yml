@@ -1,25 +1,28 @@
 version: '2'
-services: 
-  api_ldch_torproxy:
+
+services:
+  ldch_torproxy:
     restart: always
     image: dperson/torproxy
-    container_name: "api_ldch_torproxy"
+    container_name: "ldch_torproxy"
     ports:
       - "8118:8118"
-      - "9050:9050" 
-  api_ldch_spiders:
+      - "9050:9050"
+
+  ldch_mongo:
+    image: mongo
+    container_name: "ldch_mongo"
+    ports:
+      - "27017:27017"
+
+  ldch_spiders:
     restart: always
     build: ./.
     ports:
       - "8888:8888"
-    container_name: "api_ldch_spiders"
+    container_name: "ldch_spiders"
     volumes:
       - ./:/app
     depends_on:
-      - api_ldch_torproxy
-      - api_ldch_mongo
-  api_ldch_mongo:
-    image: mongo
-    container_name: "api_ldch_mongo"
-    ports:
-      - "27017:27017"
+      - ldch_torproxy
+      - ldch_mongo

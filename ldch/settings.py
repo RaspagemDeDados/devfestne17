@@ -1,40 +1,65 @@
-import os.path
+#
+# Docker
+#
 
+# Detecta se está dentro de um container
+import os.path
 DOCKER = False
 if os.path.isfile('/.dockerenv'):
     DOCKER = True
+del os
 
+#
+# Scrapy
+#
 
-# Configurações do Scrapy
+# Limites de requisições para não sobrecarregar o servidor
 DOWNLOAD_DELAY = 1
-CONCURRENT_REQUESTS_PER_DOMAIN = 3
+CONCURRENT_REQUESTS_PER_DOMAIN = 4
 
 AUTOTHROTTLE_ENABLED = True
 AUTOTHROTTLE_START_DELAY = 5
-AUTOTHROTTLE_TARGET_CONCURRENCY = 2
+AUTOTHROTTLE_TARGET_CONCURRENCY = 4
 
+# Outros ajustes de download
 DOWNLOADER_STATS = True
 RANDOMIZE_DOWNLOAD_DELAY = True
 
-SPIDER_MIDDLEWARES = {
-    'ldch.base.LdchMiddleware': 400,
-    'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware': None
+
+DOWNLOADER_MIDDLEWARES = {
+    'ldch.base.LdchMiddleware': 400
 }
 
+EXTENSIONS = {
+    'ldch.base.LdchSignalHandler': 500
+}
 
+#
+# Logging
+#
 
-# Configurações do LDCH
+LOG_FILE = 'ldch.log'
+LOG_LEVEL = 'WARNING'
 
-START_YEAR = 2017
+#
+# Etcétera
+#
 
+START_YEAR = 2017           # Ano de início para raspagem
+ENABLE_TOR_PROXY = False    # Habilita ou desabilita o uso do Tor
+TOR_CHANGE_CIRCUIT_INTERVAL_RANGE = (100, 400) # Solicita mudança de circuito Tor entre X e Y segundos
+
+# Opções para caso esteja utilizando o Docker
 if DOCKER:
-    MONGO_URI = 'mongodb://api_ldch_mongo/ldch'
-    HTTP_PROXY = 'http://api_ldch_torproxy:8118'
-else:
-    MONGO_URI = 'mongodb://localhost/ldch'
-    HTTP_PROXY = 'http://localhost:8118'
+    MONGO_URI = 'mongodb://ldch_mongo/ldch'
+    HTTP_PROXY = 'http://ldch_torproxy:8118'
 
-TOR_CHANGE_CIRCUIT_INTERVAL_RANGE = (100, 400)
+# Opções para caso contrário
+else:
+    MONGO_URI = 'mongodb://localhost/ldch'      # Conexão com o MongoDB
+    HTTP_PROXY = 'http://localhost:8118'        # Endereço do proxy HTTP para acesso do Tor
+
+
 USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
@@ -134,5 +159,3 @@ USER_AGENTS = [
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36',
     'Mozilla/5.0 (Windows NT 10.0; WOW64; rv:52.0) Gecko/20100101 Firefox/52.0'
 ]
-
-del os

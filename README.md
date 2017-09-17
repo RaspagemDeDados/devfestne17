@@ -1,6 +1,16 @@
 # Robôs a serviço da cidadania
 
-Repositório para produção de código da palestra (ainda não aceita) no DevFest Nordeste 2017.
+Repositório para raspagem de dados de orgãos públicos baianos.
+
+## Iniciando o projeto
+Ajuste as opções desejadas no arquivo `settings.py` e execute os
+seguintes comandos.
+
+```bash
+$ python3 setup.py develop
+$ start_ldch
+```
+
 
 ## Requisitos
 * Docker
@@ -16,9 +26,6 @@ $ ldch_devfestne17
 
 ## TODO
 
-* Alterar user-agent!
-* Ajustar os logs
-   * escrever para arquivo
 * Tratar erros do TCE
     * ano sem remuneração (ex 2013)
-    * falhas de banco de dados que aparentam ser um ano sem remuneração
+    * falhas de banco de dados que aparentam ser um mês sem remuneração

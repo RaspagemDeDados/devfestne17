@@ -5,14 +5,14 @@ setup(
     version='0.1',
     packages=find_packages(),
     install_requires=[
-        #'requests',
-        #'scrapy',
-        #'paramiko',
-        #'stem',
-        #'twisted',
-        #'pymongo',
+        'paramiko',
+        'pymongo',
+        'requests',
+        'Scrapy',
+        'stem',
+        'Twisted'
     ],
     entry_points = {
-        'console_scripts': ['ldch_devfestne17 = ldch.base:run_spiders']
+        'console_scripts': ['start_ldch = ldch.base:run_spiders']
     }
 )

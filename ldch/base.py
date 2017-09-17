@@ -1,18 +1,41 @@
-import collections
 import datetime
 import json
-from random import randint, choice, shuffle
+from random import randint, choice
 from urllib.parse import quote
 
 import pymongo
 import requests
 import scrapy
+import scrapy.item
+import scrapy.signals
 import stem
 import stem.control
-from ldch import settings
 from scrapy.crawler import CrawlerProcess
 from scrapy.settings import Settings
 from twisted.internet import reactor
+
+from ldch import settings
+
+
+def date_range(start, end=None):
+    try:
+        start_year, start_month = start
+    except:
+        start_year = start
+        start_month = 1
+    if end is not None:
+        end_year, end_month = end
+    else:
+        now = datetime.datetime.now()
+        end_year = now.year
+        end_month = now.month - 1
+    for year in range(start_year, end_year+1):
+        for month in range(1, 13):
+            if year == start_year and month < start_month:
+                continue
+            if year == end_year and month > end_month:
+                continue
+            yield (year, month)
 
 
 def parse_int(v):
@@ -32,7 +55,7 @@ def change_tor_circuit():
         tor.signal(stem.Signal.NEWNYM)
 
 
-def web_archive(url, user_agent, proxy):
+def web_archive(url, user_agent=None, proxy=None):
     "Aciona arquivamento da web.archive.org e retorna a URL."
 
     if not hasattr(web_archive, '_cache'):
@@ -46,8 +69,10 @@ def web_archive(url, user_agent, proxy):
     url2 += quote(url)
 
     with requests.Session() as session:
-        session.proxies.update({'http': proxy})
-        session.headers.update({'User-Agent': user_agent})
+        if proxy is not None:
+            session.proxies.update({'http': proxy})
+        if user_agent is not None:
+            session.headers.update({'User-Agent': user_agent})
         session.get(url1)
         req2 = session.get(url2)
     payload = json.loads(req2.content.decode())
@@ -57,69 +82,97 @@ def web_archive(url, user_agent, proxy):
     return wa_url
 
 
+class Database:
+    "Classe de acesso ao banco."
+
+    def __init__(self):
+        self.db = pymongo.MongoClient(settings.MONGO_URI)
+
+    def __enter__(self):
+        return self.db.__enter__()['ldch']
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.db.__exit__(exc_type, exc_val, exc_tb)
+
+
 class LdchMiddleware:
-    "Prepara requisições e posprocessa resultados de raspagens."
+    "Middleare para preparação de requisições."
 
-    def process_start_requests(self, start_requests, spider):
-        "Prepara uma requisição."
+    def process_request(self, request, spider):
+        # atribúi um user agent aleatório
+        user_agent = choice(spider.settings['USER_AGENTS'])
+        request.headers.setdefault(b'User-Agent', user_agent)
 
-        requests = list(start_requests)
-        shuffle(requests)
+        # atribúi o proxy
+        if settings.ENABLE_TOR_PROXY:
+            request.meta['proxy'] = spider.settings['HTTP_PROXY']
 
-        for request in requests:
-            request.meta['proxy'] = spider.settings.get('HTTP_PROXY')
-            request.headers['User-Agent'] = choice(spider.settings.get('USER_AGENTS'))
-            yield request
 
-    def process_spider_output(self, response, result, spider):
-        """Adiciona URL e data final da extração ao resultado. Depois aciona o
-        arquivamento da página no web.archive.org e salva o resultado no MongoDB.
-        """
-        url = response.url
-        user_agent = choice(spider.settings.get('USER_AGENTS'))
-        mongo_uri = spider.settings.get('MONGO_URI')
-        mongo_collection = spider.name
-        proxy = spider.settings.get('HTTP_PROXY')
-        now = datetime.datetime.now()
+class LdchSignalHandler:
+    "Lida com sinais do Scrapy."
 
-        for item in result:
-            # ignora itens que não são resultados (ex. requisições)
-            if not isinstance(item, collections.MutableMapping):
-                yield item
-                continue
+    @classmethod
+    def from_crawler(cls, crawler, *args, **kwargs):
+        ext = cls()
+        crawler.signals.connect(ext.spider_error, signal=scrapy.signals.spider_error)
+        crawler.signals.connect(ext.item_scraped, signal=scrapy.signals.item_scraped)
+        crawler.signals.connect(ext.response_downloaded, signal=scrapy.signals.response_downloaded)
+        return ext
 
-            # adiciona metadados
-            item['__url'] = response.url
-            item['__date'] = now
-            item['__request_body'] = response.request.body.decode()
+    def spider_error(self, failure, response, spider):
+        "Registra exceções no banco de dados."
 
-            # arquiva na web.archive.org caso seja possível
-            if response.request.method == 'GET':
-                item['__web_archive_url'] = web_archive(url, user_agent, proxy)
+        with Database() as db:
+            error = self._create_error('exception', response, response.request, spider)
+            error['traceback'] = failure.getTraceback()
+            db['Errors'].insert_one(error)
 
-            self._save_result(mongo_uri, mongo_collection, item)
-            yield item
+    def item_scraped(self, item, response, spider):
+        "Salva itens no banco de dados."
 
-    def _save_result(self, mongo_uri, collection, item):
-        with pymongo.MongoClient(mongo_uri) as client:
-            db = client['ldch']
-            db[collection].insert_one(item)
+        with Database() as db:
+            db[spider.name].insert_one(item)
+            page = {
+                'url': response.url,
+                'request_body': response.request.body.decode()
+            }
+            if not db['Meta'].find_one(page):
+                if response.request.method == 'GET':
+                    page['web_archive'] = self._web_archive(response.url)
+                db['Meta'].insert_one(page)
+
+    def response_downloaded(self, response, request, spider):
+        "Registra erros HTTP no banco de dados."
+
+        if response.status >= 400:
+            with Database() as db:
+                error = self._create_error('http_error', response, request, spider)
+                error['status'] = response.status
+                db['Errors'].insert_one(error)
+
+    @classmethod
+    def _web_archive(self, url):
+        user_agent = choice(settings.USER_AGENTS)
+        proxy = None
+        if settings.ENABLE_TOR_PROXY:
+            proxy = settings.HTTP_PROXY
+        return web_archive(url, user_agent, proxy)
+
+    @classmethod
+    def _create_error(cls, type, response, request, spider):
+        return {
+            'type':  type,
+            'spider': spider.name,
+            'url': response.url,
+            'method': request.method,
+            'request_body': request.body.decode()
+        }
 
 
 class LdchSpider(scrapy.Spider):
     """Base para os spiders do LDCH.
 
-    Subclasses de LdchSpider podem implementar o método `start_requests()` que
-    retorna uma iterador de `scrapy.Requests()`. Cada `scrapy.Request` tem uma
-    URL e um callback. O callback poderá retornar um iterador de itens
-    (`dict`s) que representa os dados raspados. `finish_item()` deverá ser
-    aplicado em cada item antes de ser "`yield`ado".
-
-    Variações do esquema acima são possíveis dentro das possibilidades do
-    Scrapy.
-
-    Todos os nomes de `Spider`s devem terminar com a string "Spider", por
-    exemplo "TceRemunSpider".
+    Todos os nomes de spiders devem terminar com a string 'Spider'.
     """
 
     fields = None
@@ -130,14 +183,11 @@ class LdchSpider(scrapy.Spider):
         assert n.endswith("Spider"), "Spider name does not ends with 'Spider'"
         return n[:n.index('Spider')]
 
-    def tuple_to_dict(self, args):
-        """Utilitário para transformar um iterável num dicionário.
+    def list_to_item(self, args):
+        "Transforma uma lista num item de acordo com os campos e validação da variável `fields`."
 
-        A propriedade `value_names` é uma lista ordenada de títulos que será
-        para cada elemento do iterador.
-        """
         if self.fields is not None and len(args) != len(self.fields):
-            raise ValueError("Length of arguments is different from value_names")
+            raise ValueError("Length of arguments is different from fields")
 
         result = {}
         for (name, parser), value in zip(self.fields, args):
@@ -148,24 +198,32 @@ class LdchSpider(scrapy.Spider):
 
         return result
 
+    def dict_to_item(self, dict):
+        "Transforma dicionário num item de acordo com os campos e validação da variável `fields`."
+        if len(dict) != len(self.fields):
+            raise ValueError("Length of dictionary is different from fields")
+        for name, converter in self.fields:
+            dict[name] = converter(dict[name])
+        return dict
 
 
 class TorTestSpider(LdchSpider):
 
     def start_requests(self):
-        for i in range(40):
+        for i in range(2):
             url = 'https://check.torproject.org?%d' % i
             yield scrapy.Request(url, self.parse)
 
     def parse(self, response):
         yield {
-            'h1': response.xpath('//h1/text()').extract_first(),
-            'strong': response.xpath('//strong/text()').extract_first()
+            'h1': response.xpath('//h1/text()').extract_first().strip(),
+            'strong': response.xpath('//strong/text()').extract_first().strip()
         }
 
 
 def run_spiders():
     from ldch.tcm import TcmRemuneracaoSpider
+    from ldch.tce import TceRemuneracaoSpider
 
     def random_wait_time():
         start, end = settings.TOR_CHANGE_CIRCUIT_INTERVAL_RANGE
@@ -181,10 +239,10 @@ def run_spiders():
     scrapy_settings.setmodule(settings)
     proc = CrawlerProcess(scrapy_settings)
 
-    for klass in [TcmRemuneracaoSpider]:
+    for klass in [TcmRemuneracaoSpider, TceRemuneracaoSpider]:
         proc.crawl(klass)
-
-    reactor.callLater(random_wait_time(), change_tor_circuit_randomly)
+    if settings.ENABLE_TOR_PROXY:
+        reactor.callLater(random_wait_time(), change_tor_circuit_randomly)
     proc.start()
 
 
