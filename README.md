@@ -12,11 +12,7 @@ $ start_ldch
 ```
 
 
-## Requisitos
-* Docker
-* docker-compose
-
-## Instalação e Execução
+## Iniciando o projeto com Docker
 
 ```bash
 $ docker-compose run
