@@ -34,12 +34,16 @@ EXTENSIONS = {
     'ldch.base.LdchSignalHandler': 500
 }
 
+DUPEFILTER_CLASS = 'ldch.base.LdchDupeFilter'
+
+
 #
 # Logging
 #
 
 LOG_FILE = 'ldch.log'
-LOG_LEVEL = 'WARNING'
+LOG_LEVEL = 'DEBUG'
+DUPEFILTER_DEBUG = True
 
 #
 # Etcétera

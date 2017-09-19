@@ -1,11 +1,13 @@
 import datetime
 import json
+import urllib.parse
 from random import randint, choice
-from urllib.parse import quote
 
 import pymongo
 import requests
 import scrapy
+import scrapy.dupefilters
+import scrapy.exceptions
 import scrapy.item
 import scrapy.signals
 import stem
@@ -66,7 +68,7 @@ def web_archive(url, user_agent=None, proxy=None):
 
     url1 = 'http://web.archive.org/save/' + url
     url2 = 'http://web.archive.org/__wb/sparkline?output=json&collection=web&url='
-    url2 += quote(url)
+    url2 += urllib.parse.quote(url)
 
     with requests.Session() as session:
         if proxy is not None:
@@ -100,12 +102,13 @@ class LdchMiddleware:
 
     def process_request(self, request, spider):
         # atribúi um user agent aleatório
-        user_agent = choice(spider.settings['USER_AGENTS'])
+
+        user_agent = choice(settings.USER_AGENTS)
         request.headers.setdefault(b'User-Agent', user_agent)
 
         # atribúi o proxy
         if settings.ENABLE_TOR_PROXY:
-            request.meta['proxy'] = spider.settings['HTTP_PROXY']
+            request.meta['proxy'] = settings.HTTP_PROXY
 
 
 class LdchSignalHandler:
@@ -131,15 +134,21 @@ class LdchSignalHandler:
         "Salva itens no banco de dados."
 
         with Database() as db:
-            db[spider.name].insert_one(item)
-            page = {
+            new_page = {
                 'url': response.url,
                 'request_body': response.request.body.decode()
             }
-            if not db['Meta'].find_one(page):
+            page = db['Meta'].find_one(new_page)
+            if page:
+                page_id = page['_id']
+            else:
                 if response.request.method == 'GET':
-                    page['web_archive'] = self._web_archive(response.url)
-                db['Meta'].insert_one(page)
+                     new_page['web_archive'] = self._web_archive(response.url)
+                result = db['Meta'].insert_one(new_page)
+                page_id = result.inserted_id
+
+            item['__meta'] = page_id
+            db[spider.name].insert_one(item)
 
     def response_downloaded(self, response, request, spider):
         "Registra erros HTTP no banco de dados."
@@ -167,6 +176,18 @@ class LdchSignalHandler:
             'method': request.method,
             'request_body': request.body.decode()
         }
+
+
+class LdchDupeFilter(scrapy.dupefilters.RFPDupeFilter):
+    "Ignora requisições duplicadas, inclusive as já registradas previamente no banco."
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        with Database() as db:
+            for meta in db['Meta'].find():
+                request = scrapy.Request(meta['url'], body=meta['request_body'])
+                self.request_seen(request)
 
 
 class LdchSpider(scrapy.Spider):
@@ -200,6 +221,7 @@ class LdchSpider(scrapy.Spider):
 
     def dict_to_item(self, dict):
         "Transforma dicionário num item de acordo com os campos e validação da variável `fields`."
+
         if len(dict) != len(self.fields):
             raise ValueError("Length of dictionary is different from fields")
         for name, converter in self.fields:
