@@ -73,3 +73,32 @@ class TcmRemuneracaoSpider(LdchSpider):
             remuneracao['Competência'] = response.meta['competencia']
             yield remuneracao
 
+
+#consulta=ano&ano=2017&desp=P&municipio=2900108&entidade=1&pesquisar=Pesquisar
+
+class TcmDespesasSpider(LdchSpider):
+    start_urls = ["http://www.tcm.ba.gov.br/consulta-de-despesas/"]
+
+    def parse(self, response):
+        municipios_id = response.xpath("//select[@id='municipio']/option[@value != '']/@value").extract()
+
+        for municipio_id in municipios_id:
+            entidades_url = 'http://www.tcm.ba.gov.br/Webservice/public/index.php/despesas/entidade?' + urlencode({
+                'muni': str(municipio_id)
+            })
+
+            yield scrapy.Request(entidades_url, callback=self.extrair_entidades)
+
+    def extrair_entidades(self, response):
+        pass
+
+            # url = "http://www.tcm.ba.gov.br/consulta-de-despesas/" + urlencode({
+            #     'consulta': 'ano',
+            #     'ano': 2017, # TODO: variar os anos
+            #     'cdMunicipio': municipio_id.strip(),
+            #     entidade:
+            # })
+            # meta = {
+            #     'municipio_nome': municipio_nome.strip()
+            # }
+            # yield scrapy.Request(url, meta=meta, callback=self.extrair_entidades)

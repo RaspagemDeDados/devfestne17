@@ -41,9 +41,9 @@ DUPEFILTER_CLASS = 'ldch.base.LdchDupeFilter'
 # Logging
 #
 
-LOG_FILE = 'ldch.log'
+# LOG_FILE = 'ldch.log'
 LOG_LEVEL = 'DEBUG'
-DUPEFILTER_DEBUG = True
+DUPEFILTER_DEBUG = False
 
 #
 # Etcétera

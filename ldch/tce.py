@@ -23,7 +23,7 @@ class TceRemuneracaoSpider(LdchSpider):
         for ano, mes in date_range(settings.START_YEAR):
             url = 'https://www.tce.ba.gov.br/component/cdsremuneracao/?' + urlencode({
                 'ano': ano,
-                'mes': mes,
+                'mes':mes,
                 'pesquisar': 'Pesquisar',
                 'tmpl': 'component',
                 'view': 'consolidado'

@@ -246,6 +246,7 @@ class TorTestSpider(LdchSpider):
 def run_spiders():
     from ldch.tcm import TcmRemuneracaoSpider
     from ldch.tce import TceRemuneracaoSpider
+    from ldch.tcm import TcmDespesasSpider
 
     def random_wait_time():
         start, end = settings.TOR_CHANGE_CIRCUIT_INTERVAL_RANGE
@@ -261,7 +262,7 @@ def run_spiders():
     scrapy_settings.setmodule(settings)
     proc = CrawlerProcess(scrapy_settings)
 
-    for klass in [TcmRemuneracaoSpider, TceRemuneracaoSpider]:
+    for klass in [TcmDespesasSpider]:
         proc.crawl(klass)
     if settings.ENABLE_TOR_PROXY:
         reactor.callLater(random_wait_time(), change_tor_circuit_randomly)
