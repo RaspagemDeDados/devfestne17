@@ -13,6 +13,6 @@ setup(
         'Twisted'
     ],
     entry_points = {
-        'console_scripts': ['start_ldch = ldch.base:run_spiders']
+        'console_scripts': ['start_ldch = ldch.spiders.base:run_spiders']
     }
 )

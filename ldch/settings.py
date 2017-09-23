@@ -14,7 +14,7 @@ del os
 #
 
 # Limites de requisições para não sobrecarregar o servidor
-DOWNLOAD_DELAY = 1
+# DOWNLOAD_DELAY = 1
 CONCURRENT_REQUESTS_PER_DOMAIN = 4
 
 AUTOTHROTTLE_ENABLED = True
@@ -24,17 +24,20 @@ AUTOTHROTTLE_TARGET_CONCURRENCY = 4
 # Outros ajustes de download
 DOWNLOADER_STATS = True
 RANDOMIZE_DOWNLOAD_DELAY = True
+DOWNLOAD_TIMEOUT = 30
+DNS_TIMEOUT = 30
 
 
 DOWNLOADER_MIDDLEWARES = {
-    'ldch.base.LdchMiddleware': 400
+    'ldch.spiders.base.LdchMiddleware': 1000,
+    'scrapy.downloadermiddlewares.retry.RetryMiddleware': None
 }
 
 EXTENSIONS = {
-    'ldch.base.LdchSignalHandler': 500
+    'ldch.spiders.base.LdchSignalHandler': 500
 }
 
-DUPEFILTER_CLASS = 'ldch.base.LdchDupeFilter'
+DUPEFILTER_CLASS = 'ldch.spiders.base.LdchDupeFilter'
 
 
 #
@@ -43,15 +46,18 @@ DUPEFILTER_CLASS = 'ldch.base.LdchDupeFilter'
 
 LOG_FILE = 'ldch.log'
 LOG_LEVEL = 'DEBUG'
-DUPEFILTER_DEBUG = True
+#LOG_STDOUT = True
+DUPEFILTER_DEBUG = False
 
 #
 # Etcétera
 #
 
-START_YEAR = 2017           # Ano de início para raspagem
+START_YEAR = 2014           # Ano de início para raspagem
 ENABLE_TOR_PROXY = False    # Habilita ou desabilita o uso do Tor
 TOR_CHANGE_CIRCUIT_INTERVAL_RANGE = (100, 400) # Solicita mudança de circuito Tor entre X e Y segundos
+SKIP_FAILED_URLS_HTTP_ERRORS = True     # Não repete requisições que resultaram em erros HTTP
+SKIP_FAILED_URLS_EXCEPTIONS = False     # Repete requisições que causaram exceções
 
 # Opções para caso esteja utilizando o Docker
 if DOCKER:

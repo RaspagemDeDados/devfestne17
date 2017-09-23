@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 
 import scrapy
 
-from ldch.base import LdchSpider, parse_float
+from ldch.spiders.base import LdchSpider, parse_float
 
 
 class TcmRemuneracaoSpider(LdchSpider):

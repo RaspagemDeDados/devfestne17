@@ -3,7 +3,7 @@ from urllib.parse import urlencode
 import scrapy
 
 from ldch import settings
-from ldch.base import LdchSpider, parse_float, date_range
+from ldch.spiders.base import LdchSpider, parse_float, date_range
 
 
 class TceRemuneracaoSpider(LdchSpider):
@@ -54,44 +54,3 @@ class TceRemuneracaoSpider(LdchSpider):
 
         if (i or 0) + 1 != len(cargos):
             raise Exception("Quantidade de cargos diferente da quantidade de tabelas")
-
-
-# class TceVencimentoBasico(scrapy.Spider):
-#     name = 'tcevencimentobasico'
-#     start_urls = ['http://www.tce.ba.gov.br/institucional/transparencia/gestao-de-pessoas/43-institucional/transparencia/2416-tabela-de-vencimentos']
-#
-#     def parse(self, resp):
-#         for table in resp.css('.tvTbody'):
-#             position = table.xpath('(preceding::strong/span)[last()]/text()').extract_first()
-#             group = table.xpath('(preceding::h2)[last()]/text()').extract_first()
-#             for i, row in enumerate(table.css('tr')):
-#                 vencimento = row.xpath('(td[not(*)]|td/p)/text()').extract()
-#                 try:
-#                     if len(vencimento) == 0:
-#                         continue
-#                     if len(vencimento) == 2:
-#                         vencimento = self.extract_vencimento_2(vencimento)
-#                     else:
-#                         vencimento = self.extract_vencimento_3(vencimento)
-#                 except ValueError:
-#                     logging.error("Vencimento não extraído com sucesso:\n"
-#                         "Cargo: %s\n"
-#                         "Registro: %s" % (position, vencimento))
-#                     continue
-#
-#                 vencimento['Cargo'] = position
-#                 vencimento['Grupo'] = group
-#                 yield vencimento
-#
-#     def extract_vencimento_3(self, values):
-#         return {
-#             'Classe': values[0].strip(),
-#             'Referência': int(values[1].strip()),
-#             'Parcela fixa': parse_float(values[2][3:])
-#         }
-#
-#     def extract_vencimento_2(self, values):
-#         return {
-#             'Subsídio': values[0],
-#             'Parcela fixa': parse_float(values[1])
-#         }

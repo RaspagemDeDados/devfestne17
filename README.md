@@ -3,12 +3,14 @@
 Repositório para raspagem de dados de orgãos públicos baianos.
 
 ## Iniciando o projeto
-Ajuste as opções desejadas no arquivo `settings.py` e execute os
-seguintes comandos.
+Ajuste as opções desejadas no módulo `ldch.settings` e execute os
+seguintes comandos:
 
 ```bash
 $ python3 setup.py develop
-$ start_ldch
+$ start_ldch \
+    ldch.spiders.tce.TceRemuneracaoSpider \
+    ldch.spiders.tcm.TcmRemuneracaoSpider
 ```
 
 
@@ -16,8 +18,16 @@ $ start_ldch
 
 ```bash
 $ docker-compose run
-$ ldch_devfestne17
+$ start_ldch \
+    ldch.spiders.tce.TceRemuneracaoSpider \
+    ldch.spiders.tcm.TcmRemuneracaoSpider
 ```
+
+
+## Acesso aos dados
+
+Todos os dados estão armazenados de acordo com `ldch.settings`, por
+padrão, no banco `ldch`.
 
 
 ## TODO
