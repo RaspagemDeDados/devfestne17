@@ -2,7 +2,7 @@ library(data.table)
 library(tidyverse)
 
 #setting working directory
-setwd("/home/cdesantana/DataSCOUT/TCM")
+setwd("path-to-directory-where-the-data-is")
 
 #reading the dataset (using 'data.table::fread' function because it reads data faster than other functions)
 dat <- fread("./tcm.csv",sep=",",header=T)
